@@ -234,7 +234,8 @@ def auto_calibrate(camera):
             calibrate_frame.after(10, lambda: capture_frame(count))
             return
 
-        frame_rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+        # เนื่องจากเราใช้ "RGB888" แล้ว จึงไม่ต้องแปลงสี
+        frame_rgb = frame.copy()
         frame_rgb.flags.writeable = False
 
         pose_results = calib_pose.process(frame_rgb)
@@ -293,9 +294,9 @@ def start_calibration():
     loading_label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
     animate_loading()
 
-    # เปิดกล้อง Pi Camera สำหรับ calibration
+    # เปิดกล้อง Pi Camera สำหรับ calibration โดยใช้ RGB888
     picam2_calib = Picamera2()
-    picam2_calib.configure(picam2_calib.create_preview_configuration(main={"format": "BGR888", "size": (640, 480)}))
+    picam2_calib.configure(picam2_calib.create_preview_configuration(main={"format": "RGB888", "size": (640, 480)}))
     picam2_calib.start()
 
     # สมมุติว่ากล้องพร้อมใช้งานแล้ว
@@ -366,8 +367,8 @@ def process_frame_thread():
         if frame_count % skip_frames != 0:
             continue
 
-        # frame ที่ได้จาก Pi Camera จะอยู่ในรูปแบบ BGR
-        frame_rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+        # กล้องส่งออกเป็น RGB888 แล้ว ไม่ต้องแปลงสี
+        frame_rgb = frame.copy()
         frame_rgb.flags.writeable = False
 
         pose_results = pose.process(frame_rgb)
@@ -470,8 +471,10 @@ def update_ui():
     if processed_frame is not None:
         pil_frame = Image.fromarray(processed_frame, 'RGB')
         
-        w = video_label.winfo_width()
-        h = video_label.winfo_height()
+        # w = video_label.winfo_width()
+        # h = video_label.winfo_height()
+        w = 480
+        h = 320
         
         video_img = ctk.CTkImage(light_image=pil_frame, size=(w, h))
         video_label.configure(image=video_img)
@@ -485,7 +488,7 @@ def start_video():
     processed_frame = None
 
     picam2_monitor = Picamera2()
-    picam2_monitor.configure(picam2_monitor.create_preview_configuration(main={"format": "BGR888", "size": (640, 480)}))
+    picam2_monitor.configure(picam2_monitor.create_preview_configuration(main={"format": "RGB888", "size": (640, 480)}))
     picam2_monitor.start()
 
     video_running = True
