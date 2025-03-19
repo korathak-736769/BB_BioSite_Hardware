@@ -27,7 +27,7 @@ else:
 fontpath = os.path.join(base_path, "SukhumvitSet-Bold.ttf")
 global_font = ("SukhumvitSet-Bold", 14)
 font = ImageFont.truetype(fontpath, 24)
-logo_path = os.path.join(base_path, "logo.png")
+logo_path = os.path.join(base_path, "./icon_title.png")
 
 # ถ้าเจอไฟล์ logo.png ให้สร้าง CTkImage; ถ้าไม่เจอ ให้แสดงโลโก้เป็นตัวอักษร
 if os.path.exists(logo_path):
@@ -35,7 +35,7 @@ if os.path.exists(logo_path):
     from PIL import Image as PILImage
     pil_logo = PILImage.open(logo_path)
     # ปรับขนาดตามต้องการ
-    pil_logo = pil_logo.resize((200, 200), PILImage.ANTIALIAS)
+    pil_logo = pil_logo.resize((200, 200),)
     logo_image = ctk.CTkImage(light_image=pil_logo, size=(200, 200))
 else:
     logo_image = None
@@ -53,6 +53,7 @@ screen_width = pg.size().width
 
 app = ctk.CTk()
 app.title("Biosite Office Syndrome")
+app.attributes("-fullscreen", True)
 app.geometry("480x320")
 app.resizable(False, False)
 
