@@ -15,6 +15,9 @@ import threading
 import json
 import queue  # ใช้สำหรับ thread-safe queue
 
+# เพิ่ม import สำหรับ Pi Camera
+from picamera2 import Picamera2
+
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 tf.get_logger().setLevel(logging.ERROR)
 
@@ -31,11 +34,9 @@ logo_path = os.path.join(base_path, "./icon_title.png")
 
 # ถ้าเจอไฟล์ logo.png ให้สร้าง CTkImage; ถ้าไม่เจอ ให้แสดงโลโก้เป็นตัวอักษร
 if os.path.exists(logo_path):
-    # ใช้ PIL.Image เปิดรูปก่อน แล้วค่อยสร้าง CTkImage
     from PIL import Image as PILImage
     pil_logo = PILImage.open(logo_path)
-    # ปรับขนาดตามต้องการ
-    pil_logo = pil_logo.resize((200, 200),)
+    pil_logo = pil_logo.resize((200, 200))
     logo_image = ctk.CTkImage(light_image=pil_logo, size=(200, 200))
 else:
     logo_image = None
@@ -61,7 +62,6 @@ app.resizable(False, False)
 container = ctk.CTkFrame(app, width=480, height=320)
 container.grid(row=0, column=0, sticky="nsew")
 
-# กำหนดให้ container ขยายเต็มที่
 app.grid_rowconfigure(0, weight=1)
 app.grid_columnconfigure(0, weight=1)
 container.grid_rowconfigure(0, weight=1)
@@ -73,7 +73,6 @@ menu_frame = ctk.CTkFrame(container, width=480, height=320)
 calibrate_frame = ctk.CTkFrame(container, width=480, height=320)
 monitoring_frame = ctk.CTkFrame(container, width=480, height=320)
 
-# วางทุกหน้าไว้ที่ row=0, column=0 เหมือนกัน
 welcome_frame.grid(row=0, column=0, sticky="nsew")
 menu_frame.grid(row=0, column=0, sticky="nsew")
 calibrate_frame.grid(row=0, column=0, sticky="nsew")
@@ -83,7 +82,6 @@ def show_frame(frame):
     frame.tkraise()
 
 # ----------------- หน้า Welcome -----------------
-# หน้าต้อนรับที่มีโลโก้และปุ่ม "เริ่มต้นการใช้งาน" โดยจัดกลางทั้งแนวตั้งและแนวนอน
 welcome_inner = ctk.CTkFrame(welcome_frame)
 welcome_inner.pack(expand=True)
 
@@ -103,7 +101,6 @@ start_usage_btn = ctk.CTkButton(
 start_usage_btn.pack(pady=10)
 
 # ----------------- หน้า Menu -----------------
-# จัดหน้าต่าง "เลือกเมนู" ให้จัดกลางทั้งแนวตั้งและแนวนอน
 menu_inner = ctk.CTkFrame(menu_frame)
 menu_inner.pack(expand=True)
 
@@ -190,19 +187,13 @@ def animate_loading():
         calibrate_frame.after(500, update)
     update()
 
-def wait_for_camera(cap, callback):
-    if cap.isOpened():
-        callback()
-    else:
-        calibrate_frame.after(100, lambda: wait_for_camera(cap, callback))
-
-def start_countdown(t, cap):
+def start_countdown(t, camera):
     if t > 0:
         countdown_label.configure(text=str(t))
-        calibrate_frame.after(1000, lambda: start_countdown(t - 1, cap))
+        calibrate_frame.after(1000, lambda: start_countdown(t - 1, camera))
     else:
         countdown_label.configure(text="")
-        auto_calibrate(cap)
+        auto_calibrate(camera)
 
 def load_calibration():
     global shoulder_width_threshold, mouth_shoulder_ratio_threshold, is_calibrated
@@ -230,7 +221,7 @@ def save_calibration():
     with open("calibration.json", "w") as f:
         json.dump(data, f)
 
-def auto_calibrate(cap):
+def auto_calibrate(camera):
     calib_samples = 30
     shoulder_samples = []
     mouth_samples = []
@@ -238,8 +229,8 @@ def auto_calibrate(cap):
     calib_face_m = mp_face_mesh.FaceMesh(max_num_faces=1, refine_landmarks=True, min_detection_confidence=0.5)
 
     def capture_frame(count):
-        ret, frame = cap.read()
-        if not ret:
+        frame = camera.capture_array()
+        if frame is None:
             calibrate_frame.after(10, lambda: capture_frame(count))
             return
 
@@ -270,7 +261,7 @@ def auto_calibrate(cap):
         if count < calib_samples:
             calibrate_frame.after(10, lambda: capture_frame(count))
         else:
-            cap.release()
+            camera.stop()  # ปิดกล้องหลัง calibrate เสร็จ
             calib_pose.close()
             calib_face_m.close()
 
@@ -297,24 +288,20 @@ def auto_calibrate(cap):
     capture_frame(0)
 
 def start_calibration():
-    global loading_animation_running
+    global loading_animation_running, picam2_calib
     loading_animation_running = True
     loading_label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
     animate_loading()
 
-    cap = cv.VideoCapture(1)
-    cap.set(cv.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv.CAP_PROP_FRAME_HEIGHT, 480)
-    cap.set(cv.CAP_PROP_FPS, 30)
-    cap.set(cv.CAP_PROP_BUFFERSIZE, 1)
+    # เปิดกล้อง Pi Camera สำหรับ calibration
+    picam2_calib = Picamera2()
+    picam2_calib.configure(picam2_calib.create_preview_configuration(main={"format": "BGR888", "size": (640, 480)}))
+    picam2_calib.start()
 
-    def after_camera_ready():
-        global loading_animation_running
-        loading_animation_running = False
-        loading_label.place_forget()
-        start_countdown(3, cap)
-
-    wait_for_camera(cap, after_camera_ready)
+    # สมมุติว่ากล้องพร้อมใช้งานแล้ว
+    loading_animation_running = False
+    loading_label.place_forget()
+    start_countdown(3, picam2_calib)
 
 calib_start_btn = ctk.CTkButton(
     calibrate_frame,
@@ -336,7 +323,8 @@ back_btn_monitor.pack(anchor="nw", padx=10, pady=5)
 video_label = ctk.CTkLabel(monitoring_frame, text="", font=global_font)
 video_label.pack(expand=True)
 
-cap_monitor = None
+# ตัวแปรสำหรับการใช้ Pi Camera ในโหมด Monitoring
+picam2_monitor = None
 video_running = False
 skip_frames = 2
 pose = None
@@ -378,6 +366,7 @@ def process_frame_thread():
         if frame_count % skip_frames != 0:
             continue
 
+        # frame ที่ได้จาก Pi Camera จะอยู่ในรูปแบบ BGR
         frame_rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
         frame_rgb.flags.writeable = False
 
@@ -461,11 +450,10 @@ def process_frame_thread():
         processed_frame = frame_disp
 
 def capture_frame_thread():
-    global cap_monitor, video_running
-    while video_running and cap_monitor is not None:
-        ret, frame = cap_monitor.read()
-        if ret:
-            # ถ้ามีเฟรมอยู่ใน queue อยู่แล้ว ให้ลบออกเพื่อเก็บเฉพาะเฟรมล่าสุด
+    global picam2_monitor, video_running
+    while video_running and picam2_monitor is not None:
+        frame = picam2_monitor.capture_array()
+        if frame is not None:
             if not frame_queue.empty():
                 try:
                     frame_queue.get_nowait()
@@ -488,15 +476,13 @@ def update_ui():
         app.after(33, update_ui)
 
 def start_video():
-    global cap_monitor, video_running, processed_frame
+    global picam2_monitor, video_running, processed_frame
     initialize_models()
     processed_frame = None
 
-    cap_monitor = cv.VideoCapture(1)
-    cap_monitor.set(cv.CAP_PROP_FRAME_WIDTH, 640)
-    cap_monitor.set(cv.CAP_PROP_FRAME_HEIGHT, 480)
-    cap_monitor.set(cv.CAP_PROP_FPS, 30)
-    cap_monitor.set(cv.CAP_PROP_BUFFERSIZE, 1)
+    picam2_monitor = Picamera2()
+    picam2_monitor.configure(picam2_monitor.create_preview_configuration(main={"format": "BGR888", "size": (640, 480)}))
+    picam2_monitor.start()
 
     video_running = True
     threading.Thread(target=capture_frame_thread, daemon=True).start()
@@ -504,21 +490,18 @@ def start_video():
     update_ui()
 
 def stop_video():
-    global cap_monitor, video_running, pose, face_mesh
+    global picam2_monitor, video_running, pose, face_mesh
     video_running = False
     time.sleep(0.1)
-    if cap_monitor is not None:
-        cap_monitor.release()
-        cap_monitor = None
+    if picam2_monitor is not None:
+        picam2_monitor.stop()
+        picam2_monitor = None
     if pose is not None:
         pose.close()
     if face_mesh is not None:
         face_mesh.close()
     show_frame(menu_frame)
 
-# เรียกใช้ฟังก์ชัน load_calibration() เพื่อโหลดค่าที่เคยบันทึกไว้ (ถ้ามี)
 load_calibration()
-# เริ่มต้นที่หน้า Welcome
 show_frame(welcome_frame)
-
 app.mainloop()
