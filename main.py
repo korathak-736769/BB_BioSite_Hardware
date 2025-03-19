@@ -468,8 +468,12 @@ def update_ui():
     if not video_running:
         return
     if processed_frame is not None:
-        pil_frame = Image.fromarray(processed_frame)
-        video_img = ctk.CTkImage(light_image=pil_frame, size=(pil_frame.width, pil_frame.height))
+        pil_frame = Image.fromarray(processed_frame, 'RGB')
+        
+        w = video_label.winfo_width()
+        h = video_label.winfo_height()
+        
+        video_img = ctk.CTkImage(light_image=pil_frame, size=(w, h))
         video_label.configure(image=video_img)
         video_label.image = video_img
     if video_running:
