@@ -26,7 +26,7 @@ if getattr(sys, 'frozen', False):
 else:
     base_path = os.path.abspath(".")
 
-# โหลดฟอนต์และโลโก้ (สมมุติว่ามีไฟล์ logo.png อยู่ในโฟลเดอร์เดียวกัน)
+# โหลดฟอนต์และโลโก้
 fontpath = os.path.join(base_path, "SukhumvitSet-Bold.ttf")
 global_font = ("SukhumvitSet-Bold", 14)
 font = ImageFont.truetype(fontpath, 24)
@@ -57,7 +57,7 @@ app.attributes("-fullscreen", True)
 app.geometry("480x320")
 app.resizable(False, False)
 
-# สร้าง container หลักสำหรับวาง frame ต่างๆ
+# สร้าง container สำหรับวาง frame ต่างๆ
 container = ctk.CTkFrame(app, width=480, height=320)
 container.grid(row=0, column=0, sticky="nsew")
 
@@ -66,7 +66,7 @@ app.grid_columnconfigure(0, weight=1)
 container.grid_rowconfigure(0, weight=1)
 container.grid_columnconfigure(0, weight=1)
 
-# สร้าง frame ทั้ง 4 หน้า: welcome, menu, calibrate และ monitoring
+# สร้าง frame ทั้ง 4 หน้า: welcome, menu, calibrate, monitoring
 welcome_frame = ctk.CTkFrame(container, width=480, height=320)
 menu_frame = ctk.CTkFrame(container, width=480, height=320)
 calibrate_frame = ctk.CTkFrame(container, width=480, height=320)
@@ -140,7 +140,7 @@ exit_btn_menu = ctk.CTkButton(
 )
 exit_btn_menu.pack(pady=5)
 
-# ----------------- หน้า Calibrate Thresholds -----------------
+# ----------------- หน้า Calibrate -----------------
 back_btn_calib = ctk.CTkButton(
     calibrate_frame,
     text="Back",
@@ -233,8 +233,8 @@ def auto_calibrate(camera):
             calibrate_frame.after(10, lambda: capture_frame(count))
             return
 
-        # ไม่ต้องแปลงสีอีก เพราะกล้องส่งออกเป็น RGB888 แล้ว
-        frame_rgb = frame.copy()
+        # แปลงจาก BGR เป็น RGB เพราะแม้เราใช้ configuration "BGR888" กล้องส่งออกเป็น BGR
+        frame_rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
         frame_rgb.flags.writeable = False
 
         pose_results = calib_pose.process(frame_rgb)
@@ -293,9 +293,9 @@ def start_calibration():
     loading_label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
     animate_loading()
 
-    # เปิดกล้อง Pi Camera สำหรับ calibration โดยใช้ RGB888
+    # เปิดกล้อง Pi Camera สำหรับ calibration โดยใช้ configuration "BGR888"
     picam2_calib = Picamera2()
-    picam2_calib.configure(picam2_calib.create_preview_configuration(main={"format": "RGB888", "size": (640, 480)}))
+    picam2_calib.configure(picam2_calib.create_preview_configuration(main={"format": "BGR888", "size": (640, 480)}))
     picam2_calib.start()
 
     # สมมุติว่ากล้องพร้อมใช้งานแล้ว
@@ -366,8 +366,8 @@ def process_frame_thread():
         if frame_count % skip_frames != 0:
             continue
 
-        # ไม่ต้องแปลงสีอีก เพราะกล้องส่งออกเป็น RGB888 แล้ว
-        frame_rgb = frame.copy()
+        # แปลงจาก BGR เป็น RGB เพื่อให้สีถูกต้อง
+        frame_rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
         frame_rgb.flags.writeable = False
 
         pose_results = pose.process(frame_rgb)
@@ -469,11 +469,9 @@ def update_ui():
         return
     if processed_frame is not None:
         pil_frame = Image.fromarray(processed_frame, 'RGB')
-        
         # ใช้ขนาดคงที่ 480x320 (หรือใช้ video_label.winfo_width()/winfo_height())
         w = 480
         h = 320
-        
         video_img = ctk.CTkImage(light_image=pil_frame, size=(w, h))
         video_label.configure(image=video_img)
         video_label.image = video_img
@@ -486,7 +484,7 @@ def start_video():
     processed_frame = None
 
     picam2_monitor = Picamera2()
-    picam2_monitor.configure(picam2_monitor.create_preview_configuration(main={"format": "RGB888", "size": (640, 480)}))
+    picam2_monitor.configure(picam2_monitor.create_preview_configuration(main={"format": "BGR888", "size": (640, 480)}))
     picam2_monitor.start()
 
     video_running = True
@@ -495,10 +493,10 @@ def start_video():
     update_ui()
 
 def stop_video():
-    global picam2_monitor, video_running, pose, face_mesh
+    global picam2_monitor, video_running, pose, face_mesh, frame_queue
     video_running = False
     time.sleep(0.1)
-    # ล้างคิวเพื่อให้ thread ไม่ถูก block ด้วยข้อมูลเก่า
+    # ล้างคิวเพื่อให้ thread ไม่ block ด้วยข้อมูลเก่า
     while not frame_queue.empty():
         try:
             frame_queue.get_nowait()
@@ -509,8 +507,12 @@ def stop_video():
         picam2_monitor = None
     if pose is not None:
         pose.close()
+        pose = None
     if face_mesh is not None:
         face_mesh.close()
+        face_mesh = None
+    # รีเซ็ตคิวใหม่
+    frame_queue = queue.Queue(maxsize=1)
     show_frame(menu_frame)
 
 load_calibration()
