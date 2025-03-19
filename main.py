@@ -13,9 +13,8 @@ import customtkinter as ctk
 import tkinter as tk
 import threading
 import json
-import queue  # ใช้สำหรับ thread-safe queue
+import queue
 
-# เพิ่ม import สำหรับ Pi Camera
 from picamera2 import Picamera2
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
@@ -26,7 +25,6 @@ if getattr(sys, 'frozen', False):
 else:
     base_path = os.path.abspath(".")
 
-# โหลดฟอนต์และโลโก้
 fontpath = os.path.join(base_path, "SukhumvitSet-Bold.ttf")
 global_font = ("SukhumvitSet-Bold", 14)
 font = ImageFont.truetype(fontpath, 24)
@@ -57,7 +55,6 @@ app.attributes("-fullscreen", True)
 app.geometry("480x320")
 app.resizable(False, False)
 
-# สร้าง container สำหรับวาง frame ต่างๆ
 container = ctk.CTkFrame(app, width=480, height=320)
 container.grid(row=0, column=0, sticky="nsew")
 
@@ -66,7 +63,6 @@ app.grid_columnconfigure(0, weight=1)
 container.grid_rowconfigure(0, weight=1)
 container.grid_columnconfigure(0, weight=1)
 
-# สร้าง frame ทั้ง 4 หน้า: welcome, menu, calibrate, monitoring
 welcome_frame = ctk.CTkFrame(container, width=480, height=320)
 menu_frame = ctk.CTkFrame(container, width=480, height=320)
 calibrate_frame = ctk.CTkFrame(container, width=480, height=320)
@@ -80,7 +76,7 @@ monitoring_frame.grid(row=0, column=0, sticky="nsew")
 def show_frame(frame):
     frame.tkraise()
 
-# ----------------- หน้า Welcome -----------------
+# ----------------- Welcome Frame -----------------
 welcome_inner = ctk.CTkFrame(welcome_frame)
 welcome_inner.pack(expand=True)
 
@@ -99,7 +95,7 @@ start_usage_btn = ctk.CTkButton(
 )
 start_usage_btn.pack(pady=10)
 
-# ----------------- หน้า Menu -----------------
+# ----------------- Menu Frame -----------------
 menu_inner = ctk.CTkFrame(menu_frame)
 menu_inner.pack(expand=True)
 
@@ -140,7 +136,7 @@ exit_btn_menu = ctk.CTkButton(
 )
 exit_btn_menu.pack(pady=5)
 
-# ----------------- หน้า Calibrate -----------------
+# ----------------- Calibrate Frame -----------------
 back_btn_calib = ctk.CTkButton(
     calibrate_frame,
     text="Back",
@@ -233,7 +229,6 @@ def auto_calibrate(camera):
             calibrate_frame.after(10, lambda: capture_frame(count))
             return
 
-        # แปลงจาก BGR เป็น RGB เพราะแม้เราใช้ configuration "BGR888" กล้องส่งออกเป็น BGR
         frame_rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
         frame_rgb.flags.writeable = False
 
@@ -261,7 +256,7 @@ def auto_calibrate(camera):
         if count < calib_samples:
             calibrate_frame.after(10, lambda: capture_frame(count))
         else:
-            camera.stop()  # ปิดกล้องหลัง calibrate เสร็จ
+            camera.stop()
             calib_pose.close()
             calib_face_m.close()
 
@@ -293,12 +288,10 @@ def start_calibration():
     loading_label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
     animate_loading()
 
-    # เปิดกล้อง Pi Camera สำหรับ calibration โดยใช้ configuration "BGR888"
     picam2_calib = Picamera2()
     picam2_calib.configure(picam2_calib.create_preview_configuration(main={"format": "BGR888", "size": (640, 480)}))
     picam2_calib.start()
 
-    # สมมุติว่ากล้องพร้อมใช้งานแล้ว
     loading_animation_running = False
     loading_label.place_forget()
     start_countdown(3, picam2_calib)
@@ -311,7 +304,7 @@ calib_start_btn = ctk.CTkButton(
 )
 calib_start_btn.pack(pady=10)
 
-# ----------------- หน้า Monitoring -----------------
+# ----------------- Monitoring Frame -----------------
 back_btn_monitor = ctk.CTkButton(
     monitoring_frame,
     text="Back",
@@ -323,7 +316,6 @@ back_btn_monitor.pack(anchor="nw", padx=10, pady=5)
 video_label = ctk.CTkLabel(monitoring_frame, text="", font=global_font)
 video_label.pack(expand=True)
 
-# ตัวแปรสำหรับการใช้ Pi Camera ในโหมด Monitoring
 picam2_monitor = None
 video_running = False
 skip_frames = 2
@@ -352,7 +344,7 @@ def initialize_models():
 def process_frame_thread():
     global video_running, processed_frame
     last_text = "กำลังตรวจจับ..."
-    last_color = (255, 255, 255)
+    last_color = (255, 255, 255)  # BGR white
     bad_start = None
     frame_count = 0
 
@@ -366,15 +358,16 @@ def process_frame_thread():
         if frame_count % skip_frames != 0:
             continue
 
-        # แปลงจาก BGR เป็น RGB เพื่อให้สีถูกต้อง
+        # Convert to RGB for processing
         frame_rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
         frame_rgb.flags.writeable = False
 
         pose_results = pose.process(frame_rgb)
         face_mesh_results = face_mesh.process(frame_rgb)
 
-        frame_disp = frame_rgb.copy()
-        frame_disp.flags.writeable = True
+        # Convert back to BGR for drawing
+        frame_bgr = cv.cvtColor(frame_rgb, cv.COLOR_RGB2BGR)
+        frame_bgr.flags.writeable = True
 
         if pose_results.pose_landmarks and face_mesh_results.multi_face_landmarks:
             left_shoulder = pose_results.pose_landmarks.landmark[mp_pose.PoseLandmark.LEFT_SHOULDER]
@@ -392,10 +385,10 @@ def process_frame_thread():
                 axis=0
             )
 
-            shoulder_width = abs(left_shoulder.x - right_shoulder.x) * frame_disp.shape[1]
+            shoulder_width = abs(left_shoulder.x - right_shoulder.x) * frame_bgr.shape[1]
             shoulder_ratio = shoulder_width / screen_width
 
-            mouth_shoulder_dist = abs((left_shoulder.y + right_shoulder.y) / 2 - mouth_coords[1]) * frame_disp.shape[0]
+            mouth_shoulder_dist = abs((left_shoulder.y + right_shoulder.y) / 2 - mouth_coords[1]) * frame_bgr.shape[0]
             mouth_ratio = mouth_shoulder_dist / screen_width
 
             if shoulder_ratio > shoulder_width_threshold or mouth_ratio < mouth_shoulder_ratio_threshold:
@@ -404,31 +397,32 @@ def process_frame_thread():
                 elapsed = time.time() - bad_start
                 if elapsed >= 15:
                     last_text = "กรุณาปรับท่านั่งของคุณ"
-                    last_color = (255, 0, 0)
+                    last_color = (0, 0, 255)  # BGR red
                 else:
                     last_text = f"ท่านั่งไม่เหมาะสม นับถอยหลัง: {15 - int(elapsed)}"
-                    last_color = (255, 128, 0)
+                    last_color = (0, 128, 255)  # BGR orange
             else:
                 last_text = "ท่านั่งของคุณเหมาะสมแล้ว"
-                last_color = (0, 255, 0)
+                last_color = (0, 255, 0)  # BGR green
                 bad_start = None
 
-            cv.putText(frame_disp, f'Shoulder Ratio: {shoulder_ratio:.2f}', (10, 30),
+            cv.putText(frame_bgr, f'Shoulder Ratio: {shoulder_ratio:.2f}', (10, 30),
                        cv.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-            cv.putText(frame_disp, f'Mouth-Shoulder Ratio: {mouth_ratio:.2f}', (10, 60),
+            cv.putText(frame_bgr, f'Mouth-Shoulder Ratio: {mouth_ratio:.2f}', (10, 60),
                        cv.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
             drawing_spec = mp_drawing.DrawingSpec(thickness=1, circle_radius=1)
             connection_spec = mp_drawing.DrawingSpec(thickness=1)
             mp_drawing.draw_landmarks(
-                frame_disp,
+                frame_bgr,
                 pose_results.pose_landmarks,
                 mp_pose.POSE_CONNECTIONS,
                 landmark_drawing_spec=drawing_spec,
                 connection_drawing_spec=connection_spec
             )
 
-        # วาดข้อความลงในเฟรมโดยใช้ PIL
+        # Convert back to RGB for display
+        frame_disp = cv.cvtColor(frame_bgr, cv.COLOR_BGR2RGB)
         pil_img = Image.new("RGBA", (500, 125), (0, 0, 0, 0))
         draw = ImageDraw.Draw(pil_img)
         draw.text((100, 0), last_text, font=font, fill=last_color)
@@ -469,7 +463,6 @@ def update_ui():
         return
     if processed_frame is not None:
         pil_frame = Image.fromarray(processed_frame, 'RGB')
-        # ใช้ขนาดคงที่ 480x320 (หรือใช้ video_label.winfo_width()/winfo_height())
         w = 480
         h = 320
         video_img = ctk.CTkImage(light_image=pil_frame, size=(w, h))
@@ -480,6 +473,9 @@ def update_ui():
 
 def start_video():
     global picam2_monitor, video_running, processed_frame
+    if picam2_monitor is not None:
+        picam2_monitor.stop()
+        picam2_monitor = None
     initialize_models()
     processed_frame = None
 
@@ -495,8 +491,7 @@ def start_video():
 def stop_video():
     global picam2_monitor, video_running, pose, face_mesh, frame_queue
     video_running = False
-    time.sleep(0.1)
-    # ล้างคิวเพื่อให้ thread ไม่ block ด้วยข้อมูลเก่า
+    time.sleep(0.2)
     while not frame_queue.empty():
         try:
             frame_queue.get_nowait()
@@ -504,6 +499,7 @@ def stop_video():
             break
     if picam2_monitor is not None:
         picam2_monitor.stop()
+        picam2_monitor.close()
         picam2_monitor = None
     if pose is not None:
         pose.close()
@@ -511,8 +507,9 @@ def stop_video():
     if face_mesh is not None:
         face_mesh.close()
         face_mesh = None
-    # รีเซ็ตคิวใหม่
     frame_queue = queue.Queue(maxsize=1)
+    video_label.configure(image=None)
+    video_label.image = None
     show_frame(menu_frame)
 
 load_calibration()
