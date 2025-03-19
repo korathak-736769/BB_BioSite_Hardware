@@ -273,21 +273,30 @@ def auto_calibrate(camera):
 
     capture_frame(0)
 
+# ----------------- Fix 1: ประกาศตัวแปร Global -----------------
+picam2_calib = None  # เพิ่มตัวแปร Global
+
 def start_calibration():
-    global picam2_calib
-    if picam2_calib is not None:
-        picam2_calib.stop()
-        picam2_calib = None
+    global picam2_calib  # ประกาศใช้ Global variable
+    try:
+        # ปิดกล้องถ้ายังเปิดอยู่
+        if picam2_calib is not None:
+            picam2_calib.stop()
+            picam2_calib = None
 
-    loading_label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
-    animate_loading()
+        loading_label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+        animate_loading()
 
-    picam2_calib = Picamera2()
-    picam2_calib.configure(picam2_calib.create_preview_configuration(main={"format": "BGR888", "size": (640, 480)}))
-    picam2_calib.start()
+        # เริ่มต้นกล้องใหม่
+        picam2_calib = Picamera2()
+        picam2_calib.configure(picam2_calib.create_preview_configuration(main={"format": "BGR888", "size": (640, 480)}))
+        picam2_calib.start()
 
-    loading_label.place_forget()
-    start_countdown(3, picam2_calib)
+        loading_label.place_forget()
+        start_countdown(3, picam2_calib)
+        
+    except Exception as e:
+        calib_status_label.configure(text=f"Error: {str(e)}")
 
 calib_start_btn = ctk.CTkButton(
     calibrate_frame,
@@ -385,7 +394,7 @@ def process_frame_thread():
                     bad_start = time.time()
                 elapsed = time.time() - bad_start
                 if elapsed >= 15:
-                    last_text = "กรุณาปรับท่านั่งของคุณ"  # แก้ไขคำผิด
+                    last_text = "กรุณาปรับท่านั่งของคุณ"  # แก้คำผิด
                     last_color = (0, 0, 255)  # BGR: แดง
                 else:
                     last_text = f"ท่านั่งไม่เหมาะสม นับถอยหลัง: {15 - int(elapsed)}"
