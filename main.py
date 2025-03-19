@@ -136,6 +136,14 @@ start_btn_menu = ctk.CTkButton(
 )
 start_btn_menu.pack(pady=5)
 
+exit_btn_menu = ctk.CTkButton(
+    menu_inner,
+    text="ออกจากโปรแกรม",
+    font=global_font,
+    command=app.destroy
+)
+exit_btn_menu.pack(pady=5)
+
 # ----------------- หน้า Calibrate Thresholds -----------------
 back_btn_calib = ctk.CTkButton(
     calibrate_frame,

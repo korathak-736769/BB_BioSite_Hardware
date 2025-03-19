@@ -1,7 +1,0 @@
-numpy
-opencv-python
-mediapipe
-pyautogui
-Pillow
-customtkinter
-tensorflow
