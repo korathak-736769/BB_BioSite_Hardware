@@ -32,7 +32,6 @@ global_font = ("SukhumvitSet-Bold", 14)
 font = ImageFont.truetype(fontpath, 24)
 logo_path = os.path.join(base_path, "./icon_title.png")
 
-# ถ้าเจอไฟล์ logo.png ให้สร้าง CTkImage; ถ้าไม่เจอ ให้แสดงโลโก้เป็นตัวอักษร
 if os.path.exists(logo_path):
     from PIL import Image as PILImage
     pil_logo = PILImage.open(logo_path)
@@ -234,7 +233,7 @@ def auto_calibrate(camera):
             calibrate_frame.after(10, lambda: capture_frame(count))
             return
 
-        # เนื่องจากเราใช้ "RGB888" แล้ว จึงไม่ต้องแปลงสี
+        # ไม่ต้องแปลงสีอีก เพราะกล้องส่งออกเป็น RGB888 แล้ว
         frame_rgb = frame.copy()
         frame_rgb.flags.writeable = False
 
@@ -367,7 +366,7 @@ def process_frame_thread():
         if frame_count % skip_frames != 0:
             continue
 
-        # กล้องส่งออกเป็น RGB888 แล้ว ไม่ต้องแปลงสี
+        # ไม่ต้องแปลงสีอีก เพราะกล้องส่งออกเป็น RGB888 แล้ว
         frame_rgb = frame.copy()
         frame_rgb.flags.writeable = False
 
@@ -438,14 +437,14 @@ def process_frame_thread():
         if text_img.shape[2] == 4:
             alpha_s = text_img[:, :, 3] / 255.0
             alpha_l = 1.0 - alpha_s
-            h, w = text_img.shape[:2]
-            x = (frame_disp.shape[1] - w) // 2
-            y = frame_disp.shape[0] - h - 25
+            h_text, w_text = text_img.shape[:2]
+            x = (frame_disp.shape[1] - w_text) // 2
+            y = frame_disp.shape[0] - h_text - 25
 
             for c_ in range(3):
-                frame_disp[y:y+h, x:x+w, c_] = (
+                frame_disp[y:y+h_text, x:x+w_text, c_] = (
                     alpha_s * text_img[:, :, c_] +
-                    alpha_l * frame_disp[y:y+h, x:x+w, c_]
+                    alpha_l * frame_disp[y:y+h_text, x:x+w_text, c_]
                 )
 
         processed_frame = frame_disp
@@ -471,8 +470,7 @@ def update_ui():
     if processed_frame is not None:
         pil_frame = Image.fromarray(processed_frame, 'RGB')
         
-        # w = video_label.winfo_width()
-        # h = video_label.winfo_height()
+        # ใช้ขนาดคงที่ 480x320 (หรือใช้ video_label.winfo_width()/winfo_height())
         w = 480
         h = 320
         
@@ -500,6 +498,12 @@ def stop_video():
     global picam2_monitor, video_running, pose, face_mesh
     video_running = False
     time.sleep(0.1)
+    # ล้างคิวเพื่อให้ thread ไม่ถูก block ด้วยข้อมูลเก่า
+    while not frame_queue.empty():
+        try:
+            frame_queue.get_nowait()
+        except queue.Empty:
+            break
     if picam2_monitor is not None:
         picam2_monitor.stop()
         picam2_monitor = None
