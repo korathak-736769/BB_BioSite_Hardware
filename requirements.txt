@@ -1,0 +1,8 @@
+opencv-python
+numpy
+mediapipe
+pyautogui
+pillow
+tensorflow
+customtkinter
+picamera2
