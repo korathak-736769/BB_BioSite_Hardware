@@ -185,7 +185,7 @@ def auto_calibrate(camera):
         if frame is None:
             calibrate_frame.after(10, lambda: capture_frame(count))
             return
-        frame_rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+        frame_rgb = frame.copy()
         frame_rgb.flags.writeable = False
         pose_results = calib_pose.process(frame_rgb)
         face_mesh_results = calib_face_m.process(frame_rgb)
@@ -277,7 +277,7 @@ def process_frame_thread():
         frame_count += 1
         if frame_count % skip_frames != 0:
             continue
-        frame_rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+        frame_rgb = frame.copy()
         frame_rgb.flags.writeable = False
         pose_results = pose.process(frame_rgb)
         face_mesh_results = face_mesh.process(frame_rgb)
