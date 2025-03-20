@@ -14,7 +14,6 @@ import tkinter as tk
 import threading
 import json
 import queue
-
 from picamera2 import Picamera2
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
@@ -82,12 +81,7 @@ else:
     logo_label = ctk.CTkLabel(welcome_inner, text="LOGO", font=("SukhumvitSet-Bold", 24))
 logo_label.pack(pady=10)
 
-start_usage_btn = ctk.CTkButton(
-    welcome_inner,
-    text="เริ่มต้นการใช้งาน",
-    font=global_font,
-    command=lambda: show_frame(menu_frame)
-)
+start_usage_btn = ctk.CTkButton(welcome_inner, text="เริ่มต้นการใช้งาน", font=global_font, command=lambda: show_frame(menu_frame))
 start_usage_btn.pack(pady=10)
 
 menu_inner = ctk.CTkFrame(menu_frame)
@@ -107,35 +101,16 @@ def start_monitoring():
     show_frame(monitoring_frame)
     start_video()
 
-calib_btn_menu = ctk.CTkButton(
-    menu_inner, text="Calibrate",
-    font=global_font,
-    command=lambda: show_frame(calibrate_frame)
-)
+calib_btn_menu = ctk.CTkButton(menu_inner, text="Calibrate", font=global_font, command=lambda: show_frame(calibrate_frame))
 calib_btn_menu.pack(pady=5)
 
-start_btn_menu = ctk.CTkButton(
-    menu_inner,
-    text="Start Monitoring",
-    font=global_font,
-    command=start_monitoring
-)
+start_btn_menu = ctk.CTkButton(menu_inner, text="Start Monitoring", font=global_font, command=start_monitoring)
 start_btn_menu.pack(pady=5)
 
-exit_btn_menu = ctk.CTkButton(
-    menu_inner,
-    text="ออกจากโปรแกรม",
-    font=global_font,
-    command=app.destroy
-)
+exit_btn_menu = ctk.CTkButton(menu_inner, text="ออกจากโปรแกรม", font=global_font, command=app.destroy)
 exit_btn_menu.pack(pady=5)
 
-back_btn_calib = ctk.CTkButton(
-    calibrate_frame,
-    text="Back",
-    font=global_font,
-    command=lambda: show_frame(menu_frame)
-)
+back_btn_calib = ctk.CTkButton(calibrate_frame, text="Back", font=global_font, command=lambda: show_frame(menu_frame))
 back_btn_calib.pack(anchor="nw", padx=10, pady=5)
 
 calib_title = ctk.CTkLabel(calibrate_frame, text="Calibrate Thresholds", font=("SukhumvitSet-Bold", 20))
@@ -186,9 +161,7 @@ def load_calibration():
             shoulder_width_threshold = data.get("shoulder_width_threshold", 0.17)
             mouth_shoulder_ratio_threshold = data.get("mouth_shoulder_ratio_threshold", 0.04)
             is_calibrated = True
-            calib_status_label.configure(
-                text=f"Loaded calibration:\nShoulder {shoulder_width_threshold:.3f}, Mouth {mouth_shoulder_ratio_threshold:.3f}"
-            )
+            calib_status_label.configure(text=f"Loaded calibration:\nShoulder {shoulder_width_threshold:.3f}, Mouth {mouth_shoulder_ratio_threshold:.3f}")
             shoulder_entry.delete(0, "end")
             shoulder_entry.insert(0, f"{shoulder_width_threshold:.3f}")
             mouth_entry.delete(0, "end")
@@ -197,10 +170,7 @@ def load_calibration():
         print("Calibration file not found. Please calibrate.")
 
 def save_calibration():
-    data = {
-        "shoulder_width_threshold": shoulder_width_threshold,
-        "mouth_shoulder_ratio_threshold": mouth_shoulder_ratio_threshold
-    }
+    data = {"shoulder_width_threshold": shoulder_width_threshold, "mouth_shoulder_ratio_threshold": mouth_shoulder_ratio_threshold}
     with open("calibration.json", "w") as f:
         json.dump(data, f)
 
@@ -210,59 +180,47 @@ def auto_calibrate(camera):
     mouth_samples = []
     calib_pose = mp_pose.Pose(min_detection_confidence=0.5)
     calib_face_m = mp_face_mesh.FaceMesh(max_num_faces=1, refine_landmarks=True, min_detection_confidence=0.5)
-
     def capture_frame(count):
         frame = camera.capture_array()
         if frame is None:
             calibrate_frame.after(10, lambda: capture_frame(count))
             return
-
         frame_rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
         frame_rgb.flags.writeable = False
-
         pose_results = calib_pose.process(frame_rgb)
         face_mesh_results = calib_face_m.process(frame_rgb)
-
         if pose_results.pose_landmarks and face_mesh_results.multi_face_landmarks:
             left_shoulder = pose_results.pose_landmarks.landmark[mp_pose.PoseLandmark.LEFT_SHOULDER]
             right_shoulder = pose_results.pose_landmarks.landmark[mp_pose.PoseLandmark.RIGHT_SHOULDER]
-
             face_landmarks = face_mesh_results.multi_face_landmarks[0]
             mouth_landmarks = [face_landmarks.landmark[i] for i, _ in mp_face_mesh.FACEMESH_LIPS]
             mouth_coords = np.mean([(lm.x, lm.y) for lm in mouth_landmarks], axis=0)
-
             shoulder_width = abs(left_shoulder.x - right_shoulder.x) * frame.shape[1]
             shoulder_ratio = shoulder_width / screen_width
-
             mouth_shoulder_dist = abs((left_shoulder.y + right_shoulder.y)/2 - mouth_coords[1]) * frame.shape[0]
             mouth_ratio = mouth_shoulder_dist / screen_width
-
             shoulder_samples.append(shoulder_ratio)
             mouth_samples.append(mouth_ratio)
             count += 1
-
         if count < calib_samples:
             calibrate_frame.after(10, lambda: capture_frame(count))
         else:
             camera.stop()
+            camera.close()
+            global picam2_calib
+            picam2_calib = None
             calib_pose.close()
             calib_face_m.close()
-
             avg_shoulder = np.mean(shoulder_samples) if shoulder_samples else 0.17
             avg_mouth = np.mean(mouth_samples) if mouth_samples else 0.04
             margin = 0.1
-
             global shoulder_width_threshold, mouth_shoulder_ratio_threshold, is_calibrated
             shoulder_width_threshold = avg_shoulder * (1 + margin)
             mouth_shoulder_ratio_threshold = avg_mouth * (1 - margin)
             is_calibrated = True
             save_calibration()
-
-            calib_status_label.configure(
-                text=f"Calibrate Complete:\nShoulder {shoulder_width_threshold:.3f}, Mouth {mouth_shoulder_ratio_threshold:.3f}"
-            )
+            calib_status_label.configure(text=f"Calibrate Complete:\nShoulder {shoulder_width_threshold:.3f}, Mouth {mouth_shoulder_ratio_threshold:.3f}")
             app.after(2000, lambda: show_frame(menu_frame))
-
     capture_frame(0)
 
 picam2_calib = None
@@ -273,34 +231,20 @@ def start_calibration():
         if picam2_calib is not None:
             picam2_calib.stop()
             picam2_calib = None
-
         loading_label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
         animate_loading()
-
         picam2_calib = Picamera2()
         picam2_calib.configure(picam2_calib.create_preview_configuration(main={"format": "BGR888", "size": (640, 480)}))
         picam2_calib.start()
-
         loading_label.place_forget()
         start_countdown(3, picam2_calib)
-        
     except Exception as e:
         calib_status_label.configure(text=f"Error: {str(e)}")
 
-calib_start_btn = ctk.CTkButton(
-    calibrate_frame,
-    text="Start Calibration",
-    font=global_font,
-    command=start_calibration
-)
+calib_start_btn = ctk.CTkButton(calibrate_frame, text="Start Calibration", font=global_font, command=start_calibration)
 calib_start_btn.pack(pady=10)
 
-back_btn_monitor = ctk.CTkButton(
-    monitoring_frame,
-    text="Back",
-    font=global_font,
-    command=lambda: stop_video()
-)
+back_btn_monitor = ctk.CTkButton(monitoring_frame, text="Back", font=global_font, command=lambda: stop_video())
 back_btn_monitor.pack(anchor="nw", padx=10, pady=5)
 
 video_label = ctk.CTkLabel(monitoring_frame, text="", font=global_font)
@@ -316,114 +260,70 @@ processed_frame = None
 
 def initialize_models():
     global pose, face_mesh
-    pose = mp_pose.Pose(
-        static_image_mode=False,
-        model_complexity=1,
-        smooth_landmarks=True,
-        min_detection_confidence=0.5,
-        min_tracking_confidence=0.5
-    )
-    face_mesh = mp_face_mesh.FaceMesh(
-        static_image_mode=False,
-        max_num_faces=1,
-        refine_landmarks=True,
-        min_detection_confidence=0.5,
-        min_tracking_confidence=0.5
-    )
+    pose = mp_pose.Pose(static_image_mode=False, model_complexity=1, smooth_landmarks=True, min_detection_confidence=0.5, min_tracking_confidence=0.5)
+    face_mesh = mp_face_mesh.FaceMesh(static_image_mode=False, max_num_faces=1, refine_landmarks=True, min_detection_confidence=0.5, min_tracking_confidence=0.5)
 
 def process_frame_thread():
     global video_running, processed_frame
     last_text = "กำลังตรวจจับ..."
-    last_color = (0, 255, 0)  # RGB: เขียว
+    last_color = (0, 255, 0)
     bad_start = None
     frame_count = 0
-
     while video_running:
         try:
             frame = frame_queue.get(timeout=0.01)
         except queue.Empty:
             continue
-
         frame_count += 1
         if frame_count % skip_frames != 0:
             continue
-
         frame_rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
         frame_rgb.flags.writeable = False
-
         pose_results = pose.process(frame_rgb)
         face_mesh_results = face_mesh.process(frame_rgb)
-
         frame_display = frame_rgb.copy()
         frame_display.flags.writeable = True
-
         if pose_results.pose_landmarks and face_mesh_results.multi_face_landmarks:
             left_shoulder = pose_results.pose_landmarks.landmark[mp_pose.PoseLandmark.LEFT_SHOULDER]
             right_shoulder = pose_results.pose_landmarks.landmark[mp_pose.PoseLandmark.RIGHT_SHOULDER]
             face_landmarks = face_mesh_results.multi_face_landmarks[0]
-
             mouth_landmarks_indices = [61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291, 375, 321, 405, 314, 17, 84, 181, 91, 146]
-            mouth_coords = np.mean(
-                [(face_landmarks.landmark[i].x, face_landmarks.landmark[i].y) 
-                 for i in mouth_landmarks_indices],
-                axis=0
-            )
-
+            mouth_coords = np.mean([(face_landmarks.landmark[i].x, face_landmarks.landmark[i].y) for i in mouth_landmarks_indices], axis=0)
             shoulder_width = abs(left_shoulder.x - right_shoulder.x) * frame_display.shape[1]
             shoulder_ratio = shoulder_width / screen_width
-
             mouth_shoulder_dist = abs((left_shoulder.y + right_shoulder.y)/2 - mouth_coords[1]) * frame_display.shape[0]
             mouth_ratio = mouth_shoulder_dist / screen_width
-
             if shoulder_ratio > shoulder_width_threshold or mouth_ratio < mouth_shoulder_ratio_threshold:
                 if bad_start is None:
                     bad_start = time.time()
                 elapsed = time.time() - bad_start
                 if elapsed >= 15:
                     last_text = "กรุณาปรับท่านั่งของคุณ"
-                    last_color = (255, 0, 0)  # RGB: แดง
+                    last_color = (255, 0, 0)
                 else:
                     last_text = f"ท่านั่งไม่เหมาะสม นับถอยหลัง: {15 - int(elapsed)}"
-                    last_color = (255, 165, 0)  # RGB: ส้ม
+                    last_color = (255, 165, 0)
             else:
                 last_text = "ท่านั่งของคุณเหมาะสมแล้ว"
-                last_color = (0, 255, 0)  # RGB: เขียว
+                last_color = (0, 255, 0)
                 bad_start = None
-
-            cv.putText(frame_display, f'Shoulder Ratio: {shoulder_ratio:.2f}', (10, 30),
-                       cv.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-            cv.putText(frame_display, f'Mouth-Shoulder Ratio: {mouth_ratio:.2f}', (10, 60),
-                       cv.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-
+            cv.putText(frame_display, f'Shoulder Ratio: {shoulder_ratio:.2f}', (10, 30), cv.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            cv.putText(frame_display, f'Mouth-Shoulder Ratio: {mouth_ratio:.2f}', (10, 60), cv.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             drawing_spec = mp_drawing.DrawingSpec(color=(255, 255, 255), thickness=1, circle_radius=1)
             connection_spec = mp_drawing.DrawingSpec(color=(255, 255, 255), thickness=1)
-            
-            mp_drawing.draw_landmarks(
-                frame_display,
-                pose_results.pose_landmarks,
-                mp_pose.POSE_CONNECTIONS,
-                drawing_spec,
-                connection_spec
-            )
-
+            mp_drawing.draw_landmarks(frame_display, pose_results.pose_landmarks, mp_pose.POSE_CONNECTIONS, drawing_spec, connection_spec)
         pil_img = Image.new("RGBA", (500, 125), (0, 0, 0, 0))
         draw = ImageDraw.Draw(pil_img)
         draw.text((100, 0), last_text, font=font, fill=last_color)
         text_img = np.array(pil_img)
-
         if text_img.shape[2] == 4:
             alpha_s = text_img[:, :, 3] / 255.0
             alpha_l = 1.0 - alpha_s
             h, w = text_img.shape[:2]
             x = (frame_display.shape[1] - w) // 2
             y = frame_display.shape[0] - h - 25
-
             for c in range(3):
-                frame_display[y:y+h, x:x+w, c] = (
-                    alpha_s * text_img[:, :, c] + 
-                    alpha_l * frame_display[y:y+h, x:x+w, c]
-                )
-
+                frame_display[y:y+h, x:x+w, c] = alpha_s * text_img[:, :, c] + alpha_l * frame_display[y:y+h, x:x+w, c]
         processed_frame = frame_display
 
 def capture_frame_thread():
@@ -456,12 +356,10 @@ def start_video():
     if picam2_monitor is not None:
         picam2_monitor.stop()
         picam2_monitor = None
-
     initialize_models()
     picam2_monitor = Picamera2()
     picam2_monitor.configure(picam2_monitor.create_preview_configuration(main={"format": "BGR888", "size": (640, 480)}))
     picam2_monitor.start()
-
     video_running = True
     threading.Thread(target=capture_frame_thread, daemon=True).start()
     threading.Thread(target=process_frame_thread, daemon=True).start()
@@ -471,26 +369,21 @@ def stop_video():
     global picam2_monitor, video_running, pose, face_mesh
     video_running = False
     time.sleep(0.5)
-    
     while not frame_queue.empty():
         try:
             frame_queue.get_nowait()
         except queue.Empty:
             break
-    
     if picam2_monitor is not None:
         picam2_monitor.stop()
         picam2_monitor.close()
         picam2_monitor = None
-    
     if pose is not None:
         pose.close()
         pose = None
-    
     if face_mesh is not None:
         face_mesh.close()
         face_mesh = None
-    
     video_label.configure(image=None)
     video_label.image = None
     show_frame(menu_frame)
